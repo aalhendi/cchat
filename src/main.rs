@@ -1,7 +1,7 @@
 use std::error::Error;
 
 use tokio::{
-    io::{AsyncReadExt, AsyncWriteExt},
+    io::{AsyncBufReadExt, AsyncWriteExt, BufReader},
     net::TcpListener,
 };
 
@@ -10,12 +10,20 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let listener = TcpListener::bind("localhost:8080").await?;
 
     let (mut socket, _addr) = listener.accept().await?;
+    let (reader, mut writer) = socket.split();
+
+    let mut reader = BufReader::new(reader);
+    let mut line = String::new();
 
     // After one client connects, start an echo server.
     loop {
-        let mut buffer = [0u8; 1024]; // smol 1kB stack buffer
-        let bytes_read = socket.read(&mut buffer).await?;
+        let bytes_read = reader.read_line(&mut line).await?;
+        if bytes_read == 0 {
+            break Ok(());
+        }
+
         // Writes every single byte from input buffer to ouput buffer
-        socket.write_all(&buffer[..bytes_read]).await?;
+        writer.write_all(line.as_bytes()).await?;
+        line.clear();
     }
 }
